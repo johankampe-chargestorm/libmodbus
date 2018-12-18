@@ -146,7 +146,7 @@ static unsigned int compute_response_length_from_request(modbus_t *ctx, uint8_t 
         length = 2 + 2 * (req[offset + 3] << 8 | req[offset + 4]);
         break;
     case MODBUS_FC_READ_EXCEPTION_STATUS:
-        length = 3;
+        length = 2;
         break;
     case MODBUS_FC_REPORT_SLAVE_ID:
         /* The response is device specific (the header provides the
@@ -1554,6 +1554,45 @@ int modbus_report_slave_id(modbus_t *ctx, int max_dest, uint8_t *dest)
         for (i=0; i < rc && i < max_dest; i++) {
             dest[i] = rsp[offset + i];
         }
+    }
+
+    return rc;
+}
+
+/* This function code is used to read the contents of eight Exception
+   Status outputs in a remote device. (only available in serial
+   communication). */
+int modbus_read_exception_status(modbus_t *ctx, uint8_t *dest)
+{
+    int rc;
+    int req_length;
+    uint8_t req[_MIN_REQ_LENGTH];
+
+    if (ctx == NULL) {
+        errno = EINVAL;
+        return -1;
+    }
+
+    req_length = ctx->backend->build_request_basis(ctx, MODBUS_FC_READ_EXCEPTION_STATUS,
+                                                   0, 0, req);
+
+    req_length -= 4;
+
+    rc = send_msg(ctx, req, req_length);
+    if (rc > 0) {
+        int offset;
+        uint8_t rsp[MAX_MESSAGE_LENGTH];
+
+        rc = _modbus_receive_msg(ctx, rsp, MSG_CONFIRMATION);
+        if (rc == -1)
+            return -1;
+
+        rc = check_confirmation(ctx, req, rsp, rc);
+        if (rc == -1)
+            return -1;
+
+        offset = ctx->backend->header_length;
+        *dest = rsp[offset + 1];
     }
 
     return rc;
